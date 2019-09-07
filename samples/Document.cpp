@@ -1,4 +1,4 @@
-#include <cstdint>
+﻿#include <cstdint>
 #include <ctime>
 #include <fstream>
 #include <iostream>
@@ -85,6 +85,12 @@ void ProcessLayerFile(
 
 	char Name[256] = {};
 	std::snprintf(Name, 256, "%08x", LayerHeader.Identifier);
+    std::printf("\t\tType: %d ByteSize:%10d\n", LayerHeader.Type, int(LayerFile.GetSize()));
+    std::printf("\t\tBounds: %8d, %8d, %8d, %8d\n", LayerHeader.Bounds.X, LayerHeader.Bounds.Y, LayerHeader.Bounds.Width, LayerHeader.Bounds.Height);
+    std::printf("\t\tOpacity: %3d, Visible: %1x, Clipping: %1x, Preserve: %1x\n", LayerHeader.Opacity, LayerHeader.Visible, LayerHeader.Clipping, LayerHeader.PreserveOpacity);
+    std::printf("\t\tBlending: %x\n", LayerHeader.Blending);
+    std::printf("\t\tUnknown: %x, \tUnknown4: %x\n", LayerHeader.Unknown, LayerHeader.Unknown4);
+
 
 	// Read serialization stream
 	std::uint32_t CurTag;
@@ -94,13 +100,84 @@ void ProcessLayerFile(
 		LayerFile.Read<std::uint32_t>(CurTagSize);
 		switch( CurTag )
 		{
+            case "lorg"_Tag:
+            {
+                std::uint32_t Unknown0;
+                std::uint32_t Unknown4;
+                LayerFile.Read(Unknown0);
+                LayerFile.Read(Unknown4);
+                std::printf("\t\tUnknown: %d, \tUnknown4: %d\n", Unknown0, Unknown4);
+                break;
+            }
 			case "name"_Tag:
 			{
 				char LayerName[256] = {};
 				LayerFile.Read(LayerName, 256);
 				std::printf("\t\tName: %.256s\n", LayerName);
 				break;
-			}
+            }
+            case "pfid"_Tag:
+            {
+                std::uint32_t ParentSetID;
+                LayerFile.Read(ParentSetID);
+                std::printf("\t\tParentFolder: %d\n", ParentSetID);
+                break;
+            }
+            case "plid"_Tag:
+            {
+                std::uint32_t ParentLayerID;
+                LayerFile.Read(ParentLayerID);
+                std::printf("\t\tParentLayer: %d\n", ParentLayerID);
+                break;
+            }
+            case "lmfl"_Tag:
+            {
+                std::uint32_t ParentLayerID;
+                LayerFile.Read(ParentLayerID);
+                std::printf("\t\tMask Bitmask: %d\n",ParentLayerID);
+                break;
+            }
+            case "fopn"_Tag:
+            {
+                std::uint8_t Open;
+                LayerFile.Read(Open);
+                std::printf("\t\tFolder Open: %d\n",Open);
+                break;
+            }
+            case "texn"_Tag:
+            {
+            std::uint8_t TextureName[64] = {};
+                LayerFile.Read(TextureName, 64);
+                std::printf("\t\tTexture Name: %s\n", TextureName);
+                break;
+            }
+            case "texp"_Tag:
+            {
+                std::uint16_t TextureScale;
+                std::uint8_t TextureOpacity;
+                LayerFile.Read(TextureScale);
+                LayerFile.Read(TextureOpacity);
+                std::printf("\t\tTexture Options, Scale: %3d, Opacity:%3d\n", TextureScale, TextureOpacity);
+                break;
+            }
+            case "peff"_Tag:
+            {
+                std::uint8_t Enabled = 0; // bool
+                std::uint8_t Opacity = 0; // 100
+                std::uint8_t Width = 0;   // 1 - 15
+                LayerFile.Read(Enabled);
+                LayerFile.Read(Opacity);
+                LayerFile.Read(Width);
+                std::printf("\t\tFringe Effect Enabled: %d, Opacity: %3d, Width: %2d\n",Enabled, Opacity, Width);
+                break;
+            }
+            case "vmrk"_Tag:
+            {
+                std::uint8_t Open;
+                LayerFile.Read(Open);
+                std::printf("\t\tvmrk: %d\n", Open);
+                break;
+            }
 			default:
 			{
 				// for any streams that we do not handle,
@@ -109,7 +186,7 @@ void ProcessLayerFile(
 				break;
 			}
 		}
-	}
+    }
 	switch( static_cast<sai::LayerType>(LayerHeader.Type) )
 	{
 		case sai::LayerType::Layer:
@@ -131,7 +208,7 @@ void ProcessLayerFile(
 		case sai::LayerType::Set:
 		default:
 			break;
-	}
+    }
 }
 
 
@@ -258,13 +335,19 @@ std::unique_ptr<std::uint32_t[]> ReadRasterLayer(
 				+ Index2D(x * TileSize, y * LayerHeader.Bounds.Width, TileSize);
 			for( std::size_t i = 0; i < (TileSize * TileSize); i++ )
 			{
-				std::uint32_t CurPixel = ImageSource[i];
+                std::uint32_t CurPixel = ImageSource[i];
 				///
 				// Do any Per-Pixel processing you need to do here
-				///
+                ///
+
+                std::uint8_t reorderdPixel[4];
+                memcpy(reorderdPixel, &CurPixel, sizeof(CurPixel));
+                std::swap<std::uint8_t>(reorderdPixel[0], reorderdPixel[2]);
+                memcpy(&CurPixel, reorderdPixel, sizeof(CurPixel));
+
 				ImageDest[
 					Index2D(i % TileSize, i / TileSize, LayerHeader.Bounds.Width)
-				] = CurPixel;
+                ] = CurPixel;
 			}
 		}
 	}
